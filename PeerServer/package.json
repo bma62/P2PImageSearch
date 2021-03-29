@@ -1,0 +1,7 @@
+{
+  "name": "bma62-SE3314b-assignment3",
+  "version": "1.0.0",
+  "dependencies": {
+    "yargs": "^16.2.0"
+  }
+}
