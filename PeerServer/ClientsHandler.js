@@ -1,5 +1,6 @@
 
-const ITPpacket = require('./ITPResponse'),
+const fs = require('fs'),
+    ITPpacket = require('./ITPResponse'),
     singleton = require('./Singleton'),
     PTPpacket = require('./PTPMessage'),
     helpers = require('./helpers');

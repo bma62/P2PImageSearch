@@ -8,7 +8,7 @@ const net = require('net'),
 
 // Declare constants
 const defaultOption = 'Peer info not provided.',
-    host = 'localhost',
+    host = '127.0.0.1',
     // Get this peer's info from the current folder's name
     peerID = path.basename(process.cwd()).split('-')[0],
     peerTableSize = Number(path.basename(process.cwd()).split('-')[1]);
@@ -37,6 +37,17 @@ net.bytesWritten = 300000;
 net.bytesRead = 300000;
 net.bufferSize = 300000;
 singleton.init(version, peerID, peerTableSize);
+
+// Create a imageDB instance, and chain the listen function to it
+// The function passed to net.createServer() becomes the event handler for the 'connection'
+// event. The sock object the callback function receives UNIQUE for each connection
+const imageDB = net.createServer();
+imageDB.listen(0, host, () => {
+    console.log('ImageDB server is started at timestamp: '+singleton.getTimestamp()+' and is listening on ' + host + ':' + imageDB.address().port);
+})
+imageDB.on('connection', function(sock) {
+    handler.handleClientJoining(sock); //called for each client joining
+});
 
 // Check if -p option is provided
 if (argv.p !== defaultOption) {
