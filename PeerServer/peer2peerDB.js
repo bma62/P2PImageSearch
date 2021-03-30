@@ -11,7 +11,9 @@ const defaultOption = 'Peer info not provided.',
     host = '127.0.0.1',
     // Get this peer's info from the current folder's name
     peerID = path.basename(process.cwd()).split('-')[0],
-    peerTableSize = Number(path.basename(process.cwd()).split('-')[1]);
+    // TODO: change this back to read directory
+    peerTableSize = 2;
+// peerTableSize = Number(path.basename(process.cwd()).split('-')[1]);
 
 // Set up command line options
 const argv = yargs
@@ -39,13 +41,12 @@ net.bufferSize = 300000;
 singleton.init(version, peerID, peerTableSize);
 
 // Create a imageDB instance, and chain the listen function to it
-// The function passed to net.createServer() becomes the event handler for the 'connection'
-// event. The sock object the callback function receives UNIQUE for each connection
 const imageDB = net.createServer();
 imageDB.listen(0, host, () => {
-    console.log('ImageDB server is started at timestamp: '+singleton.getTimestamp()+' and is listening on ' + host + ':' + imageDB.address().port);
+    console.log('ImageDB server is started at timestamp: ' + singleton.getTimestamp() + ' and is listening on ' + host + ':' + imageDB.address().port);
 })
-imageDB.on('connection', function(sock) {
+// **** Image Socket ****
+imageDB.on('connection', function (sock) {
     handler.handleClientJoining(sock); //called for each client joining
 });
 
@@ -56,11 +57,12 @@ if (argv.p !== defaultOption) {
 // If the -p option is not provided, start server right away
 else {
     // Use 0 for port to let OS assign an unused port
+    // **** Peer Port ****
     startPTPServer(0, host, peerID);
 }
 
 // **** CLIENT-SIDE CODE ****
-function startPTPClient(peerOption){
+function startPTPClient(peerOption) {
 
     // Read command line inputs in
     const peerAddress = peerOption.split(':')[0],
@@ -68,7 +70,8 @@ function startPTPClient(peerOption){
 
     // Create socket
     let client = new net.Socket();
-    let peerPacket = Buffer.alloc(0), redirect, peerAddressTable = [], peerPortTable = [], redirectCounter = 0;
+    let peerPacket = Buffer.alloc(0), redirect, peerAddressTable = [], peerPortTable = [], redirectCounter = 0,
+        declinedPeerTable = []; // Added table to track peers that declined connection
 
     // Connect to the designated peer and port
     client.connect(peerPort, peerAddress);
@@ -89,14 +92,15 @@ function startPTPClient(peerOption){
             // Decode the packet and retrieve peer table received from the peer if any
             const peerResults = decodePacket(peerPacket, client.remoteAddress, client.remotePort);
             redirect = peerResults.redirect;
-            // If the peer table is not empty, then we are doing reconnections and the table should not be overwritten
-            if (peerAddressTable.length === 0) {
-                peerAddressTable = peerResults.peerAddressTable;
-                peerPortTable = peerResults.peerPortTable;
+
+            // If connection to peer is redirected, append that peer's full peer table for redirection later
+            if (redirect) {
+                peerAddressTable = peerAddressTable.concat(peerResults.peerAddressTable);
+                peerPortTable = peerPortTable.concat(peerResults.peerPortTable);
             }
 
-            // If redirect is false and the peer table is null, then the version/messageType is not recognized, so exit
-            if (!redirect && peerAddressTable === null) {
+            // If redirect is false and the decoded peer table is null, then the version/messageType is not recognized, so exit
+            if (!redirect && peerResults.peerAddressTable === null) {
                 console.log(`Unrecognized PTP version or message type from ${peerAddress}:${peerPort}; the program will exit...`);
                 process.exit();
             }
@@ -104,17 +108,18 @@ function startPTPClient(peerOption){
             else if (!redirect) {
                 // Get OS assigned port to start server
                 const assignedPort = client.localPort;
+                // **** Peer Port ****
                 startPTPServer(assignedPort, host, peerID);
             }
             // If redirect is true, but the peer table is empty or we have reached the bottom of the table - exit the program
-            else if (redirect && (peerAddressTable.length === 0 || peerAddressTable.length === redirectCounter)){
+            else if (redirect && (peerAddressTable.length === 0 || redirectCounter === peerAddressTable.length)) {
                 redirect = false;
                 console.log(`No joinable peer; the program will exit...`);
                 process.exit();
             }
-            // Try to go down the peer table and redirect to another peer
+            // Record the peer declined and try to go down the peer table to redirect to another peer
             else {
-                // console.log(`Redirecting to ${peerAddressTable[redirectCounter]}:${peerPortTable[redirectCounter]}`);
+                declinedPeerTable.push(`${client.remoteAddress}:${client.remotePort}`);
                 redirect = true;
             }
         }
@@ -122,9 +127,19 @@ function startPTPClient(peerOption){
 
     // Socket fully closed because redirecting has to be performed or a peer left
     client.on('close', () => {
-        // No need redirect if a peer just left
+        // No need to redirect if a peer just left
         if (redirect) {
             peerPacket = Buffer.alloc(0); // Clear the buffer used for previous packet
+
+            // Check if the peer to re-connect has declined connection before, if yes - skip it
+            while (declinedPeerTable.includes(`${peerAddressTable[redirectCounter]}:${peerPortTable[redirectCounter]}`)) {
+                ++redirectCounter;
+                // If we have reached the bottom of the table - exit the program
+                if (redirectCounter === peerAddressTable.length) {
+                    console.log(`No joinable peer; the program will exit...`);
+                    process.exit();
+                }
+            }
 
             client.connect(peerPortTable[redirectCounter], peerAddressTable[redirectCounter], () => {
                 ++redirectCounter;
@@ -133,8 +148,10 @@ function startPTPClient(peerOption){
         }
     });
 
+    // If a peer has left, try connecting to that peer's address will cause an error - no need to handle, just exit
     client.on('error', (err) => {
-        console.log(`Error: ${err}\n`);
+        console.log(`Connection to a peer already left - ${err}; the program will exit...\n`);
+        process.exit();
     });
 }
 
@@ -143,7 +160,7 @@ function startPTPServer(serverPort, serverHost, peerID) {
 
     const peerServer = net.createServer();
 
-    peerServer.listen( serverPort, serverHost, () => {
+    peerServer.listen(serverPort, serverHost, () => {
         console.log(`This peer address is ${peerServer.address().address}:${peerServer.address().port} located at ${peerID}\n`);
     });
 
@@ -184,10 +201,10 @@ function decodePacket(packet, senderAddress, senderPort) {
         let IPString = helpers.padStringToLength(helpers.int2bin(packet.readUInt32BE(bufferOffset)), 32);
         bufferOffset = bufferOffset + 4;
 
-        IPString = helpers.bin2int(IPString.substring(0,8)) + '.' +
-            helpers.bin2int(IPString.substring(8,16)) + '.' +
-            helpers.bin2int(IPString.substring(16,24)) + '.' +
-            helpers.bin2int(IPString.substring(24,32));
+        IPString = helpers.bin2int(IPString.substring(0, 8)) + '.' +
+            helpers.bin2int(IPString.substring(8, 16)) + '.' +
+            helpers.bin2int(IPString.substring(16, 24)) + '.' +
+            helpers.bin2int(IPString.substring(24, 32));
         peerAddressTable.push(IPString);
 
         peerPortTable.push(packet.readUInt16BE(bufferOffset));
@@ -232,12 +249,11 @@ function decodePacket(packet, senderAddress, senderPort) {
 function displayReceivedPeerTable(peerAddressTable, peerPortTable) {
     if (peerAddressTable.length > 0) {
         let message = '  which is peered with: ';
-        peerAddressTable.forEach( (peerAddress, index) => {
+        peerAddressTable.forEach((peerAddress, index) => {
             message += `[${peerAddress}:${peerPortTable[index]}]`;
             if (index !== peerAddressTable.length - 1) {
                 message += ', ';
-            }
-            else {
+            } else {
                 message += '\n';
             }
         })

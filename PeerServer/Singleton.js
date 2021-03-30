@@ -1,7 +1,7 @@
 
 // Some properties of this peer node
 let timer, sequenceNumber, PTPVersion, senderID, peerAddressTable, peerPortTable, peerTableSize;
-//TODO: add a table of peers tried for reconnection
+//TODO: add a table of seen searches
 module.exports = {
     init: function(version, peerID, tableSize) {
 

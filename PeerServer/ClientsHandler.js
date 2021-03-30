@@ -87,8 +87,6 @@ module.exports = {
             console.log(`Error: ${err}\n`);
         });
     }
-
-
 };
 
 function printPacket(packet) {
