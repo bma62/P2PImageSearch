@@ -4,7 +4,7 @@ let packet = Buffer.alloc(0);
 
 module.exports = {
 
-    init: function(version, isFulfilled, sequenceNumber, timestamp, imageTypeArray, imageNameArray, imageArray) {
+    init: function(version, isFulfilled, isServerBusy, sequenceNumber, timestamp, imageTypeArray, imageNameArray, imageArray) {
 
         // The packet length is at least 8 bytes of the fixed header
         let packetLength = 8, bufferOffset = 0;
@@ -28,8 +28,11 @@ module.exports = {
             f = '0';
         }
 
-        // Check if any image is found
-        if (imageNameArray.length > 0) {
+        // Check if any image is found or if server is busy
+        if (isServerBusy) {
+            responseType = helpers.padStringToLength(helpers.int2bin(3), 8);
+        }
+        else if (imageNameArray.length > 0) {
             // Found
             responseType = helpers.padStringToLength(helpers.int2bin(1), 8);
         }

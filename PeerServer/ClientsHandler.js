@@ -27,8 +27,8 @@ module.exports = {
 
                 // Handle packet
                 printPacket(requestPacket);
-                decodePacket(requestPacket, timeStamp);
-                servePacket(sock);
+                decodePacket(sock, requestPacket, timeStamp);
+                // servePacket(sock);
             }
         });
 
@@ -109,9 +109,9 @@ function printPacket(packet) {
 }
 
 let imageCount = 0, imageTypeArray = [], imageNameArray = [],
-    fileArray = [], fileNameArray = [], fileTypeArray = [];
+    fileArray = [], fileNameArray = [], fileTypeArray = [], isServerBusy = false; // The server should only serve one client at a time
 
-function decodePacket(packet, timeStamp) {
+function decodePacket(sock, packet, timeStamp) {
     console.log(`\nClient-${timeStamp} requests:`);
 
     // First byte of packet
@@ -130,11 +130,37 @@ function decodePacket(packet, timeStamp) {
 
     // 4th byte is request type
     let requestType = packet.readUInt8(bufferOffset);
+    // 0 is from clients only
     if (requestType === 0) {
         console.log(`\t--Request type: Query`);
+
+        if (isServerBusy) {
+            // Form busy packet
+            ITPpacket.init(7, false, true, singleton.getSequenceNumber(),
+                singleton.getTimestamp(), [], [], []);
+            let packet = ITPpacket.getPacket();
+
+            // Add a one-byte delimiter for client to concatenate buffer chunks
+            let delimiter = Buffer.from('\n');
+            packet = Buffer.concat([packet, delimiter])
+
+            // Send to client
+            sock.write(packet);
+        }
+        else {
+            // Enforce to serve only 1 client at a time
+            isServerBusy = true;
+            // TODO: serve packet
+        }
     }
+    // 1 is from peers who have the image being searched
+    else if (requestType === 1) {
+        console.log(`\t--Response type: Found`);
+        // TODO: decode image from peer
+    }
+    // Other numbers in this field shouldn't occur to the server
     else {
-        console.log(`\t--Request type: Unexpected!`);
+        console.error(`\t--Response type: Unexpected!`);
     }
 
     // Repeat for the payload part to read image names and types
