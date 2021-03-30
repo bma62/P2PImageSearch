@@ -1,6 +1,6 @@
 
 // Some properties of this peer node
-let timer, sequenceNumber, PTPVersion, senderID, peerAddressTable, peerPortTable, peerTableSize;;
+let timer, sequenceNumber, PTPVersion, senderID, peerAddressTable, peerPortTable, peerTableSize;
 //TODO: add a table of peers tried for reconnection
 module.exports = {
     init: function(version, peerID, tableSize) {

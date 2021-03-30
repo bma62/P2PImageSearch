@@ -1,9 +1,8 @@
 const net = require('net'),
     fs = require('fs'),
     open = require('open'),
-    yargs = require('yargs');
-
-const ITPpacket = require('./ITPRequest'),
+    yargs = require('yargs'),
+    ITPpacket = require('./ITPRequest'),
     helpers = require('./helpers');
 
 // Set up command line options
@@ -47,7 +46,7 @@ let responsePacket = Buffer.alloc(0);
 
 // Connect to the designated host and port
 client.connect(port, host, () => {
-    console.log('Connected to the server.');
+    console.log(`Connected to ImageDB server on: ${host}:${port}\n`);
 
     // Send packet through and add a one-byte delimiter for server to concatenate buffer chunks
     let packet = ITPpacket.getBytePacket(),
@@ -75,7 +74,7 @@ client.on('data', (data) => {
 
 // Socket half-closed
 client.on('end', () => {
-    console.log('\nDisconnected from the server.');
+    console.log('Disconnected from the server.');
 });
 
 // Socket fully closed
@@ -107,7 +106,7 @@ function printHeader(packet) {
 }
 
 function decodePacket(packet) {
-    console.log('PeerServer sent:');
+    console.log('Server sent:');
 
     // Read first 4 bytes of the header, convert to binary string, and pad to 32-bit length
     let bufferOffset = 0;
@@ -155,7 +154,7 @@ function decodePacket(packet) {
     // Second 4 bytes of the header is timestamp
     let timestamp = packet.readUInt32BE(bufferOffset);
     bufferOffset = bufferOffset + 4;
-    console.log(`\t--Timestamp: ${timestamp}`);
+    console.log(`\t--Timestamp: ${timestamp}\n`);
 
     // Payload section
     let imageType = '',

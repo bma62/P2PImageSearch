@@ -9,8 +9,8 @@ module.exports = {
 
     handleClientJoining: function (sock) {
 
-        let timeStamp = singleton.getTimestamp();
-        console.log(`\nClient-${timeStamp} is connected at timestamp: ${timeStamp}\n`);
+        const timeStamp = singleton.getTimestamp();
+        console.log(`Client-${timeStamp} is connected at timestamp: ${timeStamp}\n`);
 
         let requestPacket = Buffer.alloc(0);
 
@@ -33,7 +33,7 @@ module.exports = {
         });
 
         sock.on('close', () => {
-            console.log(`\nClient-${timeStamp} closed the connection.\n`);
+            console.log(`Client-${timeStamp} closed the connection.\n`);
         });
 
         sock.on('error', (err) => {
