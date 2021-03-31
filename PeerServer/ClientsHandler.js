@@ -3,6 +3,7 @@ const fs = require('fs'),
     ITPpacket = require('./ITPResponse'),
     singleton = require('./Singleton'),
     PTPpacket = require('./PTPMessage'),
+    PTPSeachPacket = require('./PTPSearch'),
     helpers = require('./helpers');
 
 module.exports = {
@@ -80,8 +81,30 @@ module.exports = {
 
             // Send to client and add peer info to table
             sock.write(packet);
-            singleton.addPeer(peerAddress, peerPort);
+            singleton.addPeer(peerAddress, peerPort, sock);
         }
+
+        let searchPacket = Buffer.alloc(0);
+
+        // Peer server receives data when other peers send P2P search
+        //TODO: add on data to handle peer search requests
+        sock.on('data', data => {
+
+            // Concatenate data in case the packet is divided into multiple chunks
+            searchPacket = Buffer.concat([searchPacket, data]);
+
+            // Check for the delimiter for complete packet
+            if (searchPacket.slice(-1).toString() === '\n'){
+                // Remove the delimiter
+                searchPacket = searchPacket.slice(0, -1);
+
+                // Handle packet
+                // printPacket(searchPacket);
+                // decodePacket(sock, searchPacket, timeStamp);
+                // servePacket(sock);
+                console.log(searchPacket.toString());
+            }
+        })
 
         sock.on('error', (err) => {
             console.log(`Error: ${err}\n`);
@@ -108,7 +131,7 @@ function printPacket(packet) {
     console.log(packetBits);
 }
 
-let imageCount = 0, imageTypeArray = [], imageNameArray = [],
+let imageCount = 0, imageTypeArray = [], imageNameArray = [], fullFileNameArray = [],
     fileArray = [], fileNameArray = [], fileTypeArray = [], isServerBusy = false; // The server should only serve one client at a time
 
 function decodePacket(sock, packet, timeStamp) {
@@ -150,7 +173,7 @@ function decodePacket(sock, packet, timeStamp) {
         else {
             // Enforce to serve only 1 client at a time
             isServerBusy = true;
-            // TODO: serve packet
+            servePacket(sock);
         }
     }
     // 1 is from peers who have the image being searched
@@ -182,6 +205,11 @@ function decodePacket(sock, packet, timeStamp) {
         bufferOffset = bufferOffset + imageNameSize; // Move on to next image
     }
 
+    // Get another array of full file names for peer search late
+    imageNameArray.forEach( (imageName, index)=> {
+        fullFileNameArray.push(`${imageName}.${imageTypeArray[index]}`);
+    })
+
     console.log(`\t--Image file extension(s): ${imageTypeArray.toString()}`);
     console.log(`\t--Image file name(s): ${imageNameArray.toString()}`);
 }
@@ -202,23 +230,39 @@ function servePacket(sock) {
 
             // Form response packet
             // If the number of files found are same as total images requested, then it is fulfilled
-            ITPpacket.init(7, fileNameArray.length === imageCount, singleton.getSequenceNumber(),
-                singleton.getTimestamp(), fileTypeArray, fileNameArray, fileArray);
-            let packet = ITPpacket.getPacket();
+            if (fileNameArray.length === imageCount) {
+                ITPpacket.init(7, true, false, singleton.getSequenceNumber(),
+                    singleton.getTimestamp(), fileTypeArray, fileNameArray, fileArray);
+                let packet = ITPpacket.getPacket();
 
-            // Add a one-byte delimiter for client to concatenate buffer chunks
-            let delimiter = Buffer.from('\n');
-            packet = Buffer.concat([packet, delimiter])
+                // Add a one-byte delimiter for client to concatenate buffer chunks
+                let delimiter = Buffer.from('\n');
+                packet = Buffer.concat([packet, delimiter]);
 
-            // Send to client
-            sock.write(packet);
+                // Send to client
+                sock.write(packet);
 
-            // Clear the arrays for next client
-            imageNameArray = [];
-            imageTypeArray = [];
-            fileNameArray = [];
-            fileTypeArray = [];
-            fileArray = [];
+                // Clear the arrays for next client
+                imageNameArray = [];
+                imageTypeArray = [];
+                fileNameArray = [];
+                fileTypeArray = [];
+                fileArray = [];
+            }
+            // If not all images are found, send search packet to peers
+            else {
+
+                PTPSeachPacket.init(7, 3, singleton.getSearchID(), singleton.getSenderID(),
+                    singleton.getOriginatingAddress(), singleton.getOriginatingPort(), fullFileNameArray);
+
+                let packet = PTPSeachPacket.getPacket();
+                // Add a one-byte delimiter for client to concatenate buffer chunks
+                let delimiter = Buffer.from('\n');
+                packet = Buffer.concat([packet, delimiter]);
+
+                singleton.sendToAllPeers(packet);
+            }
+
         })
 
         // Error shouldn't happen as all promises are resolved regardless whether the image is found
@@ -237,10 +281,11 @@ function readFromFile(fileName, fileExtension) {
                 resolve();
             }
             else {
-                // File found, push the buffer and its name
+                // File found, update the arrays
                 fileArray.push(image);
                 fileNameArray.push(fileName);
                 fileTypeArray.push(fileExtension);
+                fullFileNameArray.splice(fullFileNameArray.indexOf(file), 1)
                 resolve();
             }
         });

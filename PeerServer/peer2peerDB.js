@@ -38,11 +38,11 @@ const version = argv.v;
 net.bytesWritten = 300000;
 net.bytesRead = 300000;
 net.bufferSize = 300000;
-singleton.init(version, peerID, peerTableSize);
 
 // Create a imageDB instance, and chain the listen function to it
 const imageDB = net.createServer();
 imageDB.listen(0, host, () => {
+    singleton.init(version, peerID, peerTableSize, host, imageDB.address().port);
     console.log('ImageDB server is started at timestamp: ' + singleton.getTimestamp() + ' and is listening on ' + host + ':' + imageDB.address().port);
 })
 // **** Image Socket ****
@@ -90,7 +90,7 @@ function startPTPClient(peerOption) {
             peerPacket = peerPacket.slice(0, -1);
 
             // Decode the packet and retrieve peer table received from the peer if any
-            const peerResults = decodePacket(peerPacket, client.remoteAddress, client.remotePort);
+            const peerResults = decodePacket(peerPacket, client.remoteAddress, client.remotePort, client);
             redirect = peerResults.redirect;
 
             // If connection to peer is redirected, append that peer's full peer table for redirection later
@@ -170,7 +170,7 @@ function startPTPServer(serverPort, serverHost, peerID) {
 }
 
 // Decode PTP packet
-function decodePacket(packet, senderAddress, senderPort) {
+function decodePacket(packet, senderAddress, senderPort, sock) {
 
     // Read first 4 bytes of the header, convert to binary string, and pad to 32-bit length
     let bufferOffset = 0;
@@ -216,7 +216,7 @@ function decodePacket(packet, senderAddress, senderPort) {
             // Message type 1 = connection successful
             console.log(`Connected to peer ${senderID}:${senderPort} at timestamp: ${singleton.getTimestamp()}`);
             console.log(`Received ack from ${senderID}:${senderPort}`);
-            singleton.addPeer(senderAddress, senderPort);
+            singleton.addPeer(senderAddress, senderPort, sock);
             displayReceivedPeerTable(peerAddressTable, peerPortTable);
             return {
                 redirect: false,
