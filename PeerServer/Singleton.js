@@ -1,6 +1,8 @@
 
+const net = require('net');
+
 // Some properties of this peer node
-let timer, sequenceNumber, PTPVersion, searchID = 0, senderID, peerAddressTable, peerPortTable, peerSocketTable, peerTableSize,
+let timer, sequenceNumber, PTPVersion, searchID = 0, senderID, peerTable, peerTableSize,
     originatingAddress, originatingPort; //Added variables to hold image port info
 //TODO: add a table of seen searches
 module.exports = {
@@ -15,9 +17,7 @@ module.exports = {
 
         PTPVersion = version;
         senderID = peerID;
-        peerAddressTable = [];
-        peerPortTable = [];
-        peerSocketTable = [];
+        peerTable = [];
         peerTableSize = tableSize;
         originatingAddress = imageDBAddress;
         originatingPort = imageDBPort;
@@ -56,23 +56,38 @@ module.exports = {
 
     // Check if the peer table is full
     isPeerTableFull: function() {
-        return peerAddressTable.length === peerTableSize;
+        return peerTable.length === peerTableSize;
     },
 
     // Insert a new peer into the peer table
-    addPeer: function(peerAddress, peerPort, peerSocket) {
-        peerAddressTable.push(peerAddress);
-        peerPortTable.push(peerPort);
-        peerSocketTable.push(peerSocket);
+    addPeer: function(peerAddress, peerPort) {
+        peerTable.push(`${peerAddress}:${peerPort}`);
+    },
+
+    // Remove a specific peer from the peer table
+    removePeer: function (peerAddress, peerPort) {
+        let peerFullAddress = `${peerAddress}:${peerPort}`;
+        let index = peerTable.indexOf(peerFullAddress);
+        if (index > -1) {
+            peerTable.splice(index, 1);
+        }
     },
 
     // Return the peer IP address table
     getPeerAddressTable: function () {
+        let peerAddressTable = []
+        peerTable.forEach(peerAddress => {
+            peerAddressTable.push(peerAddress.split(':')[0])
+        })
         return peerAddressTable;
     },
 
     // Return the peer port table
     getPeerPortTable: function () {
+        let peerPortTable = [];
+        peerTable.forEach(peerAddress => {
+            peerPortTable.push(peerAddress.split(':')[1])
+        })
         return peerPortTable;
     },
 
@@ -88,8 +103,14 @@ module.exports = {
 
     // A function to send a packet to all connected peers
     sendToAllPeers: function (packet) {
-        peerSocketTable.forEach( peerSocket => {
-            peerSocket.write(packet);
+        // peerSocketTable.forEach( peerSocket => {
+        //     peerSocket.write(packet);
+        // })
+
+        peerTable.forEach( (peerAddress, index) => {
+            let peerClient = new net.Socket();
+            peerClient.connect(peerAddress.split(':')[1], peerAddress.split(':')[0]);
+            peerClient.write(packet);
         })
     }
 };

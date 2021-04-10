@@ -1,5 +1,6 @@
 
 const fs = require('fs'),
+    net = require('net'),
     ITPpacket = require('./ITPResponse'),
     singleton = require('./Singleton'),
     PTPpacket = require('./PTPMessage'),
@@ -81,7 +82,7 @@ module.exports = {
 
             // Send to client and add peer info to table
             sock.write(packet);
-            singleton.addPeer(peerAddress, peerPort, sock);
+            singleton.addPeer(peerAddress, peerPort);
         }
 
         let searchPacket = Buffer.alloc(0);
@@ -98,6 +99,9 @@ module.exports = {
                 // Remove the delimiter
                 searchPacket = searchPacket.slice(0, -1);
 
+                // In case this peer is thought to be a new peer and got added to peer table, remove it
+                singleton.removePeer(peerAddress, peerPort);
+
                 // Handle packet
                 // printPacket(searchPacket);
                 // decodePacket(sock, searchPacket, timeStamp);
@@ -109,6 +113,7 @@ module.exports = {
         sock.on('error', (err) => {
             console.log(`Error: ${err}\n`);
         });
+
     }
 };
 
