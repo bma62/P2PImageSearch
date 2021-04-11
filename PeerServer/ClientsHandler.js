@@ -5,7 +5,8 @@ const fs = require('fs'),
     singleton = require('./Singleton'),
     PTPpacket = require('./PTPMessage'),
     PTPSeachPacket = require('./PTPSearch'),
-    helpers = require('./helpers');
+    helpers = require('./helpers'),
+    PTPHandler = require('./PTPSearchPacketHandler');
 
 module.exports = {
 
@@ -103,10 +104,7 @@ module.exports = {
                 singleton.removePeer(peerAddress, peerPort);
 
                 // Handle packet
-                // printPacket(searchPacket);
-                // decodePacket(sock, searchPacket, timeStamp);
-                // servePacket(sock);
-                console.log(searchPacket.toString());
+                PTPHandler.decodePTPSearchPacket(sock, searchPacket);
             }
         })
 
