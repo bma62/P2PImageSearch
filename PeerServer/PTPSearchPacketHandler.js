@@ -32,18 +32,19 @@ module.exports = {
         ++bufferOffset;
         let senderID = searchPacket.slice(bufferOffset, bufferOffset + senderIdLength).toString();
         bufferOffset = bufferOffset + senderIdLength;
+        console.log(`\t--Sender ID: ${senderID}`);
 
-        let peerIP = helpers.padStringToLength(helpers.int2bin(searchPacket.readUInt32BE(bufferOffset)), 32);
+        let originatingPeerIP = helpers.padStringToLength(helpers.int2bin(searchPacket.readUInt32BE(bufferOffset)), 32);
         bufferOffset = bufferOffset + 4;
 
-        peerIP = helpers.bin2int(peerIP.substring(0, 8)) + '.' +
-            helpers.bin2int(peerIP.substring(8, 16)) + '.' +
-            helpers.bin2int(peerIP.substring(16, 24)) + '.' +
-            helpers.bin2int(peerIP.substring(24, 32));
-        console.log(`\t--Originating Peer's IP: ${peerIP}`);
+        originatingPeerIP = helpers.bin2int(originatingPeerIP.substring(0, 8)) + '.' +
+            helpers.bin2int(originatingPeerIP.substring(8, 16)) + '.' +
+            helpers.bin2int(originatingPeerIP.substring(16, 24)) + '.' +
+            helpers.bin2int(originatingPeerIP.substring(24, 32));
+        console.log(`\t--Originating Peer's IP: ${originatingPeerIP}`);
 
-        let peerPort = searchPacket.readUInt16BE(bufferOffset);
-        console.log(`\t--Originating Peer's Image Port: ${peerPort}`);
+        let originatingPeerPort = searchPacket.readUInt16BE(bufferOffset);
+        console.log(`\t--Originating Peer's Image Port: ${originatingPeerPort}`);
         bufferOffset = bufferOffset + 2;
 
         let imageType = '', imageNameSize = 0, imageTypeArray = [], imageNameArray = [];
@@ -67,22 +68,23 @@ module.exports = {
         console.log(`\t--Image file name(s): ${imageNameArray.toString()}\n`);
 
         // If the search has been seen, simply return to ignore the request
-        if (singleton.hasSeenSearch(peerIP, peerPort, searchID)) {
+        if (singleton.hasSeenSearch(originatingPeerIP, originatingPeerPort, searchID)) {
             console.log('The query was seen previously - ignored\n');
             return;
         }
 
         console.log('New query - added to seen searches\n')
-        singleton.addSearchHistory(peerIP, peerPort, searchID);
+        singleton.addSearchHistory(originatingPeerIP, originatingPeerPort, searchID);
 
         //TODO: update this to check image
         let imageIsFound = false;
         if (imageIsFound) {
-            console.log('Image found locally - transmission will begin with the originating peer...\n')
+            console.log('Image found locally - transmission will begin with the originating peer...\n');
             // Connect to originating peer and send image over
         } else {
-            console.log('Image not found - forwarding query to other peers...')
-            
+            console.log('Image not found - forwarding query to other peers...');
+            singleton.forwardP2PSearchPacket(originatingPeerIP, originatingPeerPort, senderID,
+                version, searchID, imageNameArray, imageTypeArray, socket);
         }
     }
 }

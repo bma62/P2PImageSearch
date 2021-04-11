@@ -216,7 +216,7 @@ function decodePacket(packet, senderAddress, senderPort, sock) {
             // Message type 1 = connection successful
             console.log(`Connected to peer ${senderID}:${senderPort} at timestamp: ${singleton.getTimestamp()}`);
             console.log(`Received ack from ${senderID}:${senderPort}`);
-            singleton.addPeer(senderAddress, senderPort, sock);
+            singleton.addPeer(senderAddress, senderPort, sock, senderID);
             displayReceivedPeerTable(peerAddressTable, peerPortTable);
             return {
                 redirect: false,

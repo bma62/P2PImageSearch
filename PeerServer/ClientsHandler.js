@@ -37,6 +37,13 @@ module.exports = {
 
         sock.on('close', () => {
             console.log(`Client-${timeStamp} closed the connection.\n`);
+            imageNameArray = [];
+            imageTypeArray = [];
+            fileNameArray = [];
+            fileTypeArray = [];
+            fileArray = [];
+            fullFileNameArray = [];
+            isServerBusy = false;
         });
 
         sock.on('error', (err) => {
@@ -83,7 +90,7 @@ module.exports = {
 
             // Send to client and add peer info to table
             sock.write(packet);
-            singleton.addPeer(peerAddress, peerPort);
+            singleton.addPeer(peerAddress, peerPort, sock, null);
         }
 
         let searchPacket = Buffer.alloc(0);
@@ -100,11 +107,10 @@ module.exports = {
                 // Remove the delimiter
                 searchPacket = searchPacket.slice(0, -1);
 
-                // In case this peer is thought to be a new peer and got added to peer table, remove it
-                singleton.removePeer(peerAddress, peerPort);
-
                 // Handle packet
                 PTPHandler.decodePTPSearchPacket(sock, searchPacket);
+
+                searchPacket = Buffer.alloc(0)
             }
         })
 
@@ -156,6 +162,34 @@ function decodePacket(sock, packet, timeStamp) {
 
     // 4th byte is request type
     let requestType = packet.readUInt8(bufferOffset);
+
+    // Repeat for the payload part to read image names and types
+    ++bufferOffset;
+    let imageType = '', imageNameSize = 0;
+    for (let i = 0; i < imageCount; i++) {
+
+        // First 2 bytes of payload is image type and image name size
+        header = helpers.padStringToLength(helpers.int2bin(packet.readUInt16BE(bufferOffset)), 16);
+        imageType = helpers.bin2int(header.substring(0, 4)); // Bit 1-4 is image type
+        imageTypeArray.push(helpers.getImageExtension(imageType)); // Convert to extension name and add to array
+        imageNameSize = helpers.bin2int(header.substring(4)); // Bit 5-16 is image name size
+
+        bufferOffset = bufferOffset + 2; // Shift buffer offset to read image name
+
+        // As this range of buffer is characters, they can be pushed together as the full name string
+        imageNameArray.push(packet.slice(bufferOffset, bufferOffset + imageNameSize).toString());
+
+        bufferOffset = bufferOffset + imageNameSize; // Move on to next image
+    }
+
+    // Get another array of full file names for peer search late
+    imageNameArray.forEach( (imageName, index)=> {
+        fullFileNameArray.push(`${imageName}.${imageTypeArray[index]}`);
+    })
+
+    console.log(`\t--Image file extension(s): ${imageTypeArray.toString()}`);
+    console.log(`\t--Image file name(s): ${imageNameArray.toString()}`);
+
     // 0 is from clients only
     if (requestType === 0) {
         console.log(`\t--Request type: Query`);
@@ -188,33 +222,6 @@ function decodePacket(sock, packet, timeStamp) {
     else {
         console.error(`\t--Response type: Unexpected!`);
     }
-
-    // Repeat for the payload part to read image names and types
-    ++bufferOffset;
-    let imageType = '', imageNameSize = 0;
-    for (let i = 0; i < imageCount; i++) {
-
-        // First 2 bytes of payload is image type and image name size
-        header = helpers.padStringToLength(helpers.int2bin(packet.readUInt16BE(bufferOffset)), 16);
-        imageType = helpers.bin2int(header.substring(0, 4)); // Bit 1-4 is image type
-        imageTypeArray.push(helpers.getImageExtension(imageType)); // Convert to extension name and add to array
-        imageNameSize = helpers.bin2int(header.substring(4)); // Bit 5-16 is image name size
-
-        bufferOffset = bufferOffset + 2; // Shift buffer offset to read image name
-
-        // As this range of buffer is characters, they can be pushed together as the full name string
-        imageNameArray.push(packet.slice(bufferOffset, bufferOffset + imageNameSize).toString());
-
-        bufferOffset = bufferOffset + imageNameSize; // Move on to next image
-    }
-
-    // Get another array of full file names for peer search late
-    imageNameArray.forEach( (imageName, index)=> {
-        fullFileNameArray.push(`${imageName}.${imageTypeArray[index]}`);
-    })
-
-    console.log(`\t--Image file extension(s): ${imageTypeArray.toString()}`);
-    console.log(`\t--Image file name(s): ${imageNameArray.toString()}`);
 }
 
 function servePacket(sock) {
@@ -244,13 +251,6 @@ function servePacket(sock) {
 
                 // Send to client
                 sock.write(packet);
-
-                // Clear the arrays for next client
-                imageNameArray = [];
-                imageTypeArray = [];
-                fileNameArray = [];
-                fileTypeArray = [];
-                fileArray = [];
             }
             // If not all images are found, send search packet to peers
             else {
@@ -266,6 +266,13 @@ function servePacket(sock) {
                 singleton.sendToAllPeers(packet);
             }
 
+            // Clear the arrays for next client
+            imageNameArray = [];
+            imageTypeArray = [];
+            fileNameArray = [];
+            fileTypeArray = [];
+            fileArray = [];
+            fullFileNameArray = [];
         })
 
         // Error shouldn't happen as all promises are resolved regardless whether the image is found
