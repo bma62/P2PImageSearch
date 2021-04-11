@@ -2,8 +2,8 @@
 const net = require('net');
 
 // Some properties of this peer node
-let timer, sequenceNumber, PTPVersion, searchID = 0, senderID, peerTable, peerTableSize,
-    originatingAddress, originatingPort; //Added variables to hold image port info
+let timer, sequenceNumber, PTPVersion, searchID, senderID, peerTable, peerTableSize,
+    originatingAddress, originatingPort, seenSearches, seenSearchCounter; //Added variables to hold image port info and seen searches
 //TODO: add a table of seen searches
 module.exports = {
     init: function(version, peerID, tableSize, imageDBAddress, imageDBPort) {
@@ -19,6 +19,9 @@ module.exports = {
         senderID = peerID;
         peerTable = [];
         peerTableSize = tableSize;
+        searchID = 0;
+        seenSearches = [];
+        seenSearchCounter = 0;
         originatingAddress = imageDBAddress;
         originatingPort = imageDBPort;
     },
@@ -103,15 +106,28 @@ module.exports = {
 
     // A function to send a packet to all connected peers
     sendToAllPeers: function (packet) {
-        // peerSocketTable.forEach( peerSocket => {
-        //     peerSocket.write(packet);
-        // })
 
         peerTable.forEach( (peerAddress, index) => {
             let peerClient = new net.Socket();
             peerClient.connect(peerAddress.split(':')[1], peerAddress.split(':')[0]);
             peerClient.write(packet);
         })
+    },
+
+    // A function to test if the search has been seen in the past
+    hasSeenSearch: function(originatingPeerAddress, originatingPeerPort, searchID) {
+        let searchRecord = `${originatingPeerAddress}:${originatingPeerPort}-${searchID}`;
+        return seenSearches.includes(searchRecord);
+    },
+
+    // A function to add seen search record in a circular way
+    addSearchHistory: function(originatingPeerAddress, originatingPeerPort, searchID) {
+        let searchRecord = `${originatingPeerAddress}:${originatingPeerPort}-${searchID}`;
+        if (seenSearchCounter === peerTableSize) {
+            seenSearchCounter = 0;
+        }
+        seenSearches[seenSearchCounter] = searchRecord;
+        ++seenSearchCounter;
     }
 };
 

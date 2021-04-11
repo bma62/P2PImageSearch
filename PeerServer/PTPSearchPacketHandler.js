@@ -1,4 +1,5 @@
-const helpers = require('./helpers')
+const helpers = require('./helpers'),
+    singleton = require('./Singleton');
 
 module.exports = {
 
@@ -21,16 +22,16 @@ module.exports = {
         let imageCount = helpers.bin2int(header.substring(11));
         console.log(`\t--Image count: ${imageCount}`);
 
-        bufferOffset = 2; // Skip byte 2-3 as they are reserved and not used
+        bufferOffset = 2;
 
         let searchID = searchPacket.readUInt8(bufferOffset);
         console.log(`\t--Search ID: ${searchID}`);
         ++bufferOffset;
 
-        let sendIdLength = searchPacket.readUInt8(bufferOffset);
+        let senderIdLength = searchPacket.readUInt8(bufferOffset);
         ++bufferOffset;
-        let sendID = searchPacket.slice(bufferOffset, bufferOffset + sendIdLength).toString()
-        bufferOffset = bufferOffset + sendIdLength;
+        let senderID = searchPacket.slice(bufferOffset, bufferOffset + senderIdLength).toString();
+        bufferOffset = bufferOffset + senderIdLength;
 
         let peerIP = helpers.padStringToLength(helpers.int2bin(searchPacket.readUInt32BE(bufferOffset)), 32);
         bufferOffset = bufferOffset + 4;
@@ -63,6 +64,25 @@ module.exports = {
         }
 
         console.log(`\t--Image file extension(s): ${imageTypeArray.toString()}`);
-        console.log(`\t--Image file name(s): ${imageNameArray.toString()}`);
+        console.log(`\t--Image file name(s): ${imageNameArray.toString()}\n`);
+
+        // If the search has been seen, simply return to ignore the request
+        if (singleton.hasSeenSearch(peerIP, peerPort, searchID)) {
+            console.log('The query was seen previously - ignored\n');
+            return;
+        }
+
+        console.log('New query - added to seen searches\n')
+        singleton.addSearchHistory(peerIP, peerPort, searchID);
+
+        //TODO: update this to check image
+        let imageIsFound = false;
+        if (imageIsFound) {
+            console.log('Image found locally - transmission will begin with the originating peer...\n')
+            // Connect to originating peer and send image over
+        } else {
+            console.log('Image not found - forwarding query to other peers...')
+            
+        }
     }
 }
