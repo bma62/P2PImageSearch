@@ -6,7 +6,8 @@ const fs = require('fs'),
     PTPpacket = require('./PTPMessage'),
     PTPSeachPacket = require('./PTPSearch'),
     helpers = require('./helpers'),
-    PTPHandler = require('./PTPSearchPacketHandler');
+    PTPHandler = require('./PTPSearchPacketHandler'),
+    ITPResponseDecoder = require('./ITPResponseDecoder');
 
 module.exports = {
 
@@ -29,7 +30,6 @@ module.exports = {
                 requestPacket = requestPacket.slice(0, -1);
 
                 // Handle packet
-                printPacket(requestPacket);
                 decodePacket(sock, requestPacket, timeStamp);
                 // servePacket(sock);
             }
@@ -108,7 +108,7 @@ module.exports = {
                 // Handle packet
                 PTPHandler.decodePTPSearchPacket(sock, searchPacket);
 
-                searchPacket = Buffer.alloc(0)
+                searchPacket = Buffer.alloc(0);
             }
         })
 
@@ -148,10 +148,12 @@ function decodePacket(sock, packet, timeStamp) {
     if (reservedField !== 0) {
         // ****Image Transfer****
         console.log(`\nClient-${timeStamp} sent:`);
-       ITPpacket.decodeITPResponse(packet);
+       ITPResponseDecoder.decodeITPResponse(packet);
 
     } else {
         // ****Image Query****
+        printPacket(packet);
+
         console.log(`\nClient-${timeStamp} requests:`);
 
         // First byte of packet
@@ -255,6 +257,8 @@ function servePacket(sock) {
 
                 // Send to client
                 sock.write(packet);
+
+                singleton.setIsServerBusy(false);
 
             }
             // If not all images are found, save found images and send search packet to peers

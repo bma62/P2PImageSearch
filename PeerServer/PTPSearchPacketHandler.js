@@ -86,7 +86,7 @@ module.exports = {
             let fileName = `${imageName}.${imageTypeArray[index]}`;
             try {
                 // Image is found
-                let imageData = fs.readFileSync(`images/fileName`);
+                let imageData = fs.readFileSync(`images/${fileName}`);
                 responseImageName.push(imageName);
                 responseImageType.push(imageTypeArray[index]);
                 responseImage.push(imageData);
@@ -131,13 +131,28 @@ module.exports = {
                 imageClient.end();
             });
 
+            // Update the array of images to be found
+            let requestImageFullName = [];
+            imageNameArray.forEach( (imageName, index) => {
+                requestImageFullName.push(`${imageName}.${imageTypeArray[index]}`);
+
+            })
+            let responseImageFullName = [];
+            responseImageName.forEach( (imageName, index) => {
+                responseImageFullName.push(`${imageName}.${responseImageType[index]}`);
+            })
+
             // Remove found elements from query elements
-            imageNameArray = imageNameArray.filter (element => {
-                return responseImageName.indexOf(element) < 0;
+            requestImageFullName = requestImageFullName.filter (element => {
+                return responseImageFullName.indexOf(element) < 0;
             });
-            imageTypeArray = imageTypeArray.filter (element => {
-                return responseImageType.indexOf(element) < 0;
-            });
+
+            imageNameArray = [];
+            imageTypeArray = [];
+            requestImageFullName.forEach( imageFullName => {
+                imageNameArray.push(imageFullName.split('.')[0]);
+                imageTypeArray.push(imageFullName.split('.')[1]);
+            })
 
             console.log('Partial images not found - forwarding query to other peers...');
             singleton.forwardP2PSearchPacket(originatingPeerIP, originatingPeerPort, senderID,
@@ -162,6 +177,8 @@ module.exports = {
 
     // If a peer finds an image, save it
     addFileFound: function (fileName, fileType, fileData) {
+
+        console.log(`Received ${fileName}.${fileType} from peer.\n`)
         let index = fileNameToBeFound.indexOf(`${fileName}.${fileType}`);
 
         if (index > -1) {
@@ -176,8 +193,10 @@ module.exports = {
 
         // All images found, send packet to client
         if (fileNameToBeFound.length === 0) {
-            let responsePacket = ITPpacket.init(7, true, false, singleton.getSequenceNumber(),
+            ITPpacket.init(7, true, false, singleton.getSequenceNumber(),
                 singleton.getTimestamp(), foundFileType, foundFileName, foundFileData);
+
+            let responsePacket = ITPpacket.getPacket();
 
             const delimiter = Buffer.from('\n');
             responsePacket = Buffer.concat([responsePacket, delimiter]);
