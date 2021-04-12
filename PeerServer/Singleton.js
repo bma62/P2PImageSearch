@@ -210,6 +210,10 @@ module.exports = {
 
     setIsServerBusy: function (isBusy) {
       isServerBusy = isBusy;
+    },
+
+    getPeerServerId: function () {
+        return peerServerId;
     }
 
 };

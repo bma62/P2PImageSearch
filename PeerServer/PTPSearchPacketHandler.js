@@ -113,6 +113,11 @@ module.exports = {
                 imageClient.end();
             })
 
+            // Remove the peer socket that server used to send search query
+            if (senderID === singleton.getPeerServerId()) {
+                singleton.removePeer(socket.remoteAddress, socket.remotePort);
+            }
+
         } else if (responseImage.length !== 0) {
             // Partial images found
             console.log('Partial images found locally - transmission will begin with the originating peer...\n');
