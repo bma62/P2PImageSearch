@@ -4,8 +4,9 @@ const net = require('net'),
 // Some properties of this peer node
 let timer, sequenceNumber, PTPVersion, searchID, senderID, peerTable, peerIdTable, peerTableSize,
     peerServerId, peerServerSocket, // Info about the peer server this peer initially connected to
-    originatingAddress, originatingPort, seenSearches, seenSearchCounter; //Added variables to hold image port info and seen searches
-//TODO: add a table of seen searches
+    originatingAddress, originatingPort, seenSearches, seenSearchCounter, //Added variables to hold image port info and seen searches
+    isServerBusy;
+
 module.exports = {
     init: function (version, peerID, tableSize, imageDBAddress, imageDBPort) {
 
@@ -27,6 +28,7 @@ module.exports = {
         seenSearchCounter = 0;
         originatingAddress = imageDBAddress;
         originatingPort = imageDBPort;
+        isServerBusy = false;
     },
 
     //--------------------------
@@ -199,6 +201,15 @@ module.exports = {
         }
 
         console.log(`Forwarding completed.\n`)
+    },
+
+    // Enforce only 1 client at a time
+    isServerBusy: function () {
+        return isServerBusy;
+    },
+
+    setIsServerBusy: function (isBusy) {
+      isServerBusy = isBusy;
     }
 
 };

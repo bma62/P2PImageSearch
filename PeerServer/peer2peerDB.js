@@ -11,9 +11,7 @@ const defaultOption = 'Peer info not provided.',
     host = '127.0.0.1',
     // Get this peer's info from the current folder's name
     peerID = path.basename(process.cwd()).split('-')[0],
-    // TODO: change this back to read directory
-    peerTableSize = 2;
-// peerTableSize = Number(path.basename(process.cwd()).split('-')[1]);
+    peerTableSize = Number(path.basename(process.cwd()).split('-')[1]);
 
 // Set up command line options
 const argv = yargs

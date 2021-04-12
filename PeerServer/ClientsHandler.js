@@ -37,13 +37,12 @@ module.exports = {
 
         sock.on('close', () => {
             console.log(`Client-${timeStamp} closed the connection.\n`);
-            imageNameArray = [];
-            imageTypeArray = [];
-            fileNameArray = [];
-            fileTypeArray = [];
-            fileArray = [];
-            fullFileNameArray = [];
-            isServerBusy = false;
+            // imageNameArray = [];
+            // imageTypeArray = [];
+            // fileNameArray = [];
+            // fileTypeArray = [];
+            // fileArray = [];
+            // fullFileNameArray = [];
         });
 
         sock.on('error', (err) => {
@@ -86,7 +85,7 @@ module.exports = {
 
             // Add a one-byte delimiter for client to concatenate buffer chunks
             const delimiter = Buffer.from('\n');
-            packet = Buffer.concat([packet, delimiter])
+            packet = Buffer.concat([packet, delimiter]);
 
             // Send to client and add peer info to table
             sock.write(packet);
@@ -96,7 +95,6 @@ module.exports = {
         let searchPacket = Buffer.alloc(0);
 
         // Peer server receives data when other peers send P2P search
-        //TODO: add on data to handle peer search requests
         sock.on('data', data => {
 
             // Concatenate data in case the packet is divided into multiple chunks
@@ -141,86 +139,92 @@ function printPacket(packet) {
 }
 
 let imageCount = 0, imageTypeArray = [], imageNameArray = [], fullFileNameArray = [],
-    fileArray = [], fileNameArray = [], fileTypeArray = [], isServerBusy = false; // The server should only serve one client at a time
+    fileArray = [], fileNameArray = [], fileTypeArray = [] // The server should only serve one client at a time
 
 function decodePacket(sock, packet, timeStamp) {
-    console.log(`\nClient-${timeStamp} requests:`);
 
-    // First byte of packet
-    let bufferOffset = 0;
-    let header = helpers.padStringToLength(helpers.int2bin(packet.readUInt8(bufferOffset)), 8);
+    // Test if the client connects to query images or to transfer images
+    let reservedField = packet.readUInt16BE(1);
+    if (reservedField !== 0) {
+        // ****Image Transfer****
+        console.log(`\nClient-${timeStamp} sent:`);
+       ITPpacket.decodeITPResponse(packet);
 
-    // Bit 1-3 is version
-    let version = helpers.bin2int(header.substring(0, 3));
-    console.log(`\t--ITP version: ${version}`);
+    } else {
+        // ****Image Query****
+        console.log(`\nClient-${timeStamp} requests:`);
 
-    // Bit 4-8 is image count
-    imageCount = helpers.bin2int(header.substring(3));
-    console.log(`\t--Image count: ${imageCount}`);
+        // First byte of packet
+        let bufferOffset = 0;
+        let header = helpers.padStringToLength(helpers.int2bin(packet.readUInt8(bufferOffset)), 8);
 
-    bufferOffset = bufferOffset + 3; // Skip byte 2-3 as they are reserved and not used
+        // Bit 1-3 is version
+        let version = helpers.bin2int(header.substring(0, 3));
+        console.log(`\t--ITP version: ${version}`);
 
-    // 4th byte is request type
-    let requestType = packet.readUInt8(bufferOffset);
+        // Bit 4-8 is image count
+        imageCount = helpers.bin2int(header.substring(3));
+        console.log(`\t--Image count: ${imageCount}`);
 
-    // Repeat for the payload part to read image names and types
-    ++bufferOffset;
-    let imageType = '', imageNameSize = 0;
-    for (let i = 0; i < imageCount; i++) {
+        bufferOffset = bufferOffset + 3; // Skip byte 2-3 as they are reserved and not used
 
-        // First 2 bytes of payload is image type and image name size
-        header = helpers.padStringToLength(helpers.int2bin(packet.readUInt16BE(bufferOffset)), 16);
-        imageType = helpers.bin2int(header.substring(0, 4)); // Bit 1-4 is image type
-        imageTypeArray.push(helpers.getImageExtension(imageType)); // Convert to extension name and add to array
-        imageNameSize = helpers.bin2int(header.substring(4)); // Bit 5-16 is image name size
+        // 4th byte is request type
+        let requestType = packet.readUInt8(bufferOffset);
 
-        bufferOffset = bufferOffset + 2; // Shift buffer offset to read image name
+        // Repeat for the payload part to read image names and types
+        ++bufferOffset;
+        let imageType = '', imageNameSize = 0;
+        for (let i = 0; i < imageCount; i++) {
 
-        // As this range of buffer is characters, they can be pushed together as the full name string
-        imageNameArray.push(packet.slice(bufferOffset, bufferOffset + imageNameSize).toString());
+            // First 2 bytes of payload is image type and image name size
+            header = helpers.padStringToLength(helpers.int2bin(packet.readUInt16BE(bufferOffset)), 16);
+            imageType = helpers.bin2int(header.substring(0, 4)); // Bit 1-4 is image type
+            imageTypeArray.push(helpers.getImageExtension(imageType)); // Convert to extension name and add to array
+            imageNameSize = helpers.bin2int(header.substring(4)); // Bit 5-16 is image name size
 
-        bufferOffset = bufferOffset + imageNameSize; // Move on to next image
-    }
+            bufferOffset = bufferOffset + 2; // Shift buffer offset to read image name
 
-    // Get another array of full file names for peer search late
-    imageNameArray.forEach( (imageName, index)=> {
-        fullFileNameArray.push(`${imageName}.${imageTypeArray[index]}`);
-    })
+            // As this range of buffer is characters, they can be pushed together as the full name string
+            imageNameArray.push(packet.slice(bufferOffset, bufferOffset + imageNameSize).toString());
 
-    console.log(`\t--Image file extension(s): ${imageTypeArray.toString()}`);
-    console.log(`\t--Image file name(s): ${imageNameArray.toString()}`);
-
-    // 0 is from clients only
-    if (requestType === 0) {
-        console.log(`\t--Request type: Query`);
-
-        if (isServerBusy) {
-            // Form busy packet
-            ITPpacket.init(7, false, true, singleton.getSequenceNumber(),
-                singleton.getTimestamp(), [], [], []);
-            let packet = ITPpacket.getPacket();
-
-            // Add a one-byte delimiter for client to concatenate buffer chunks
-            let delimiter = Buffer.from('\n');
-            packet = Buffer.concat([packet, delimiter])
-
-            // Send to client
-            sock.write(packet);
+            bufferOffset = bufferOffset + imageNameSize; // Move on to next image
         }
+
+        // Get another array of full file names for peer search late
+        imageNameArray.forEach( (imageName, index)=> {
+            fullFileNameArray.push(`${imageName}.${imageTypeArray[index]}`);
+        })
+
+        // 0 is from clients only
+        if (requestType === 0) {
+            console.log(`\t--Request type: Query`);
+
+            if (singleton.isServerBusy()) {
+                // Form busy packet
+                ITPpacket.init(7, false, true, singleton.getSequenceNumber(),
+                    singleton.getTimestamp(), [], [], []);
+                let packet = ITPpacket.getPacket();
+
+                // Add a one-byte delimiter for client to concatenate buffer chunks
+                let delimiter = Buffer.from('\n');
+                packet = Buffer.concat([packet, delimiter])
+
+                // Send to client
+                sock.write(packet);
+            }
+            else {
+                // Enforce to serve only 1 client at a time
+                singleton.setIsServerBusy(true);
+                servePacket(sock);
+            }
+        }
+        // Other numbers in this field shouldn't occur to the server
         else {
-            // Enforce to serve only 1 client at a time
-            isServerBusy = true;
-            servePacket(sock);
+            console.error(`\t--Response type: Unexpected!`);
         }
-    }
-    // 1 is from peers who have the image being searched
-    else if (requestType === 1) {
-        console.log(`\t--Response type: Found`);
-        // TODO: decode image from peer
-    }
-    // Other numbers in this field shouldn't occur to the server
-    else {
-        console.error(`\t--Response type: Unexpected!`);
+
+        console.log(`\t--Image file extension(s): ${imageTypeArray.toString()}`);
+        console.log(`\t--Image file name(s): ${imageNameArray.toString()}`);
     }
 }
 
@@ -251,9 +255,12 @@ function servePacket(sock) {
 
                 // Send to client
                 sock.write(packet);
+
             }
-            // If not all images are found, send search packet to peers
+            // If not all images are found, save found images and send search packet to peers
             else {
+
+                PTPHandler.saveCurrentProgress(sock, fullFileNameArray, fileNameArray, fileTypeArray, fileArray);
 
                 PTPSeachPacket.init(7, 3, singleton.getSearchID(), singleton.getSenderID(),
                     singleton.getOriginatingAddress(), singleton.getOriginatingPort(), fullFileNameArray);
@@ -295,7 +302,7 @@ function readFromFile(fileName, fileExtension) {
                 fileArray.push(image);
                 fileNameArray.push(fileName);
                 fileTypeArray.push(fileExtension);
-                fullFileNameArray.splice(fullFileNameArray.indexOf(file), 1)
+                fullFileNameArray.splice(fullFileNameArray.indexOf(file), 1);
                 resolve();
             }
         });

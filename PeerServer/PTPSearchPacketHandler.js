@@ -1,5 +1,10 @@
 const helpers = require('./helpers'),
-    singleton = require('./Singleton');
+    singleton = require('./Singleton'),
+    ITPpacket = require('./ITPResponse'),
+    fs = require('fs'),
+    net = require('net');
+
+let clientSocket, fileNameToBeFound, foundFileName, foundFileType, foundFileData;
 
 module.exports = {
 
@@ -76,15 +81,112 @@ module.exports = {
         console.log('New query - added to seen searches\n')
         singleton.addSearchHistory(originatingPeerIP, originatingPeerPort, searchID);
 
-        //TODO: update this to check image
-        let imageIsFound = false;
-        if (imageIsFound) {
-            console.log('Image found locally - transmission will begin with the originating peer...\n');
-            // Connect to originating peer and send image over
+        let responseImageName = [], responseImageType = [], responseImage = [];
+        imageNameArray.forEach((imageName, index) => {
+            let fileName = `${imageName}.${imageTypeArray[index]}`;
+            try {
+                // Image is found
+                let imageData = fs.readFileSync(`images/fileName`);
+                responseImageName.push(imageName);
+                responseImageType.push(imageTypeArray[index]);
+                responseImage.push(imageData);
+            } catch (err) {
+                // Image not found
+            }
+        })
+
+        // All images are found
+        if (responseImageName.length === imageNameArray.length) {
+            console.log('All images found locally - transmission will begin with the originating peer...\n');
+
+            ITPpacket.init(version, true, false, singleton.getSequenceNumber(),
+                singleton.getTimestamp(), responseImageType, responseImageName, responseImage);
+            let responsePacket = ITPpacket.getPacket();
+            // Add a one-byte delimiter for client to concatenate buffer chunks
+            const delimiter = Buffer.from('\n');
+            responsePacket = Buffer.concat([responsePacket, delimiter]);
+
+            // Start a new socket and connect directly to originating peer's image port
+            let imageClient = new net.Socket();
+            imageClient.connect(originatingPeerPort, originatingPeerIP, () => {
+                imageClient.write(responsePacket);
+                imageClient.end();
+            })
+
+        } else if (responseImage.length !== 0) {
+            // Partial images found
+            console.log('Partial images found locally - transmission will begin with the originating peer...\n');
+
+            ITPpacket.init(version, false, false, singleton.getSequenceNumber(),
+                singleton.getTimestamp(), responseImageType, responseImageName, responseImage);
+            let responsePacket = ITPpacket.getPacket();
+            // Add a one-byte delimiter for client to concatenate buffer chunks
+            const delimiter = Buffer.from('\n');
+            responsePacket = Buffer.concat([responsePacket, delimiter]);
+
+            // Start a new socket and connect directly to originating peer's image port
+            let imageClient = new net.Socket();
+            imageClient.connect(originatingPeerPort, originatingPeerIP, () => {
+                imageClient.write(responsePacket);
+                imageClient.end();
+            });
+
+            // Remove found elements from query elements
+            imageNameArray = imageNameArray.filter (element => {
+                return responseImageName.indexOf(element) < 0;
+            });
+            imageTypeArray = imageTypeArray.filter (element => {
+                return responseImageType.indexOf(element) < 0;
+            });
+
+            console.log('Partial images not found - forwarding query to other peers...');
+            singleton.forwardP2PSearchPacket(originatingPeerIP, originatingPeerPort, senderID,
+                version, searchID, imageNameArray, imageTypeArray, socket);
         } else {
+            // No image is found
             console.log('Image not found - forwarding query to other peers...');
             singleton.forwardP2PSearchPacket(originatingPeerIP, originatingPeerPort, senderID,
                 version, searchID, imageNameArray, imageTypeArray, socket);
+        }
+
+    },
+
+    // Save found images before sending P2P search packet
+    saveCurrentProgress: function (socket, fullFileNameToBeFound, foundImageName, foundImageType, foundImageData) {
+        clientSocket = socket;
+        fileNameToBeFound = fullFileNameToBeFound;
+        foundFileName = foundImageName;
+        foundFileType = foundImageType;
+        foundFileData = foundImageData;
+    },
+
+    // If a peer finds an image, save it
+    addFileFound: function (fileName, fileType, fileData) {
+        let index = fileNameToBeFound.indexOf(`${fileName}.${fileType}`);
+
+        if (index > -1) {
+            // The image is still missing, so add it to found
+            foundFileName.push(fileName);
+            foundFileType.push(fileType);
+            foundFileData.push(fileData);
+
+            //Remove from to be found
+            fileNameToBeFound.splice(index, 1);
+        }
+
+        // All images found, send packet to client
+        if (fileNameToBeFound.length === 0) {
+            let responsePacket = ITPpacket.init(7, true, false, singleton.getSequenceNumber(),
+                singleton.getTimestamp(), foundFileType, foundFileName, foundFileData);
+
+            const delimiter = Buffer.from('\n');
+            responsePacket = Buffer.concat([responsePacket, delimiter]);
+
+            // Send to client
+            clientSocket.write(responsePacket);
+
+            // Free server for next client
+            singleton.setIsServerBusy(false);
         }
     }
 }
